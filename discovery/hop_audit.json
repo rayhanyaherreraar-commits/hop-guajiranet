@@ -1,0 +1,617 @@
+{
+  "audit_meta": {
+    "project": "hop-guajiranet",
+    "date": "2026-08-24",
+    "scope_note": "Solo se revisaron los 17 archivos listados. Ningun HPL/HWF fue modificado. Las SK de dimensiones distintas de tiempo se infieren porque los INSERT no las incluyen (identidad/serial en PostgreSQL). No se inspecciono DDL.",
+    "connection": "aws_rds",
+    "schemas": {
+      "bronze": "bronze_guajiranet",
+      "silver": "silver_guajiranet"
+    },
+    "global_load_pattern": "Pipeline: Table input -> (String operations|Select values) -> PGBulkLoader TRUNCATE a stg_*. Workflow: INSERT SELECT ON CONFLICT DO UPDATE a tbl_*. SCD Tipo 1. Sin Unique/Dimension lookup Hop."
+  },
+  "files_reviewed": [
+    "Pipelines/dim_cliente.hpl",
+    "Pipelines/dim_documento.hpl",
+    "Pipelines/dim_geografia.hpl",
+    "Pipelines/dim_servicio.hpl",
+    "Pipelines/dim_tiempo.hpl",
+    "Pipelines/fact_cartera.hpl",
+    "Pipelines/fact_facturacion.hpl",
+    "Workflows/wf_dim_cliente.hwf",
+    "Workflows/wf_dim_documento.hwf",
+    "Workflows/wf_dim_geografia.hwf",
+    "Workflows/wf_dim_servicio.hwf",
+    "Workflows/wf_dim_tiempo.hwf",
+    "Workflows/wf_fact_cartera.hwf",
+    "Workflows/wf_fact_facturacion.hwf",
+    "Workflows/wf_actualizacion_silver.hwf",
+    "Workflows/wf_delta.hwf",
+    "Workflows/wf_historic.hwf"
+  ],
+  "pipelines": [
+    {
+      "id": "dim_cliente",
+      "pipeline_file": "Pipelines/dim_cliente.hpl",
+      "workflow_file": "Workflows/wf_dim_cliente.hwf",
+      "silver_staging": "silver_guajiranet.stg_dim_cliente",
+      "silver_table": "silver_guajiranet.tbl_dim_cliente",
+      "bronze_sources": ["bronze_guajiranet.materceros", "bronze_guajiranet.matercerosuc"],
+      "natural_key": ["nit", "idsuc"],
+      "surrogate_key": {
+        "name": "sk_cliente",
+        "generated_in_hop": false,
+        "generation": "Omitida en INSERT; identidad/serial en PostgreSQL. Consumida por fact_cartera y fact_facturacion."
+      },
+      "insert_update_strategy": {
+        "staging": "TRUNCATE + PGBulkLoader",
+        "target": "UPSERT",
+        "sql_conflict": "ON CONFLICT (nit, idsuc) DO UPDATE",
+        "scd": "type_1",
+        "deletes_missing_nks": false
+      },
+      "deduplication": {
+        "hop_unique": false,
+        "sql_distinct": false,
+        "sql_group_by": false,
+        "sql_distinct_on": false,
+        "notes": "Sin deduplicacion. Un NIT con N sucursales genera N filas por diseno."
+      },
+      "joins": [
+        {
+          "left": "bronze_guajiranet.materceros t",
+          "type": "INNER JOIN",
+          "right": "bronze_guajiranet.matercerosuc s",
+          "on": "t.nit = s.nit"
+        }
+      ],
+      "columns": ["nit", "idsuc", "razonsocial", "documento_identidad", "tipo_persona", "ciudad", "direccion", "email", "movil", "es_cliente", "estado_activo", "fecha_actualizacion"],
+      "cleansing": {
+        "trim": ["razonsocial", "direccion"],
+        "upper": ["ciudad"],
+        "lower": ["email"]
+      },
+      "duplication_risks": [
+        "Grano (nit, idsuc) duplica personas; incompatible con DIM_PERSONA.",
+        "INNER JOIN descarta terceros sin sucursal.",
+        "Duplicados Bronze en (nit, idsuc) rompen ON CONFLICT en el mismo INSERT.",
+        "Cast nit VARCHAR(15) vs VARCHAR(30) en hechos: lookups fallidos.",
+        "es_cliente es de tercero; estado_activo es de sucursal (granos mezclados)."
+      ],
+      "reuse": {
+        "action": "reuse_as_seed",
+        "keep": ["patron Table input + String operations + bulk TRUNCATE", "UPSERT SQL", "limpiezas de texto", "fuente materceros y matercerosuc"],
+        "do_not_reuse": ["grano (nit, idsuc) como unica dimension", "INNER JOIN como DIM unica"]
+      }
+    },
+    {
+      "id": "dim_documento",
+      "pipeline_file": "Pipelines/dim_documento.hpl",
+      "workflow_file": "Workflows/wf_dim_documento.hwf",
+      "silver_staging": "silver_guajiranet.stg_dim_documento",
+      "silver_table": "silver_guajiranet.tbl_dim_documento",
+      "bronze_sources": ["bronze_guajiranet.madocumentos"],
+      "natural_key": ["idsuc", "prefijo"],
+      "surrogate_key": {
+        "name": "sk_documento",
+        "generated_in_hop": false,
+        "generation": "Identidad/serial en PostgreSQL. Consumida por fact_facturacion."
+      },
+      "insert_update_strategy": {
+        "staging": "TRUNCATE + PGBulkLoader",
+        "target": "UPSERT",
+        "sql_conflict": "ON CONFLICT (idsuc, prefijo) DO UPDATE",
+        "scd": "type_1",
+        "deletes_missing_nks": false
+      },
+      "deduplication": {
+        "hop_unique": false,
+        "sql_distinct": false,
+        "sql_group_by": false,
+        "sql_distinct_on": false,
+        "notes": "Sin deduplicacion."
+      },
+      "joins": [],
+      "columns": ["idsuc", "prefijo", "tipodoc", "denominacion", "tipofactura", "activo", "fecha_actualizacion"],
+      "cleansing": {
+        "trim_upper": ["prefijo", "tipodoc", "denominacion", "tipofactura", "activo"]
+      },
+      "duplication_risks": [
+        "Duplicados (idsuc, prefijo) en madocumentos rompen ON CONFLICT.",
+        "Hechos hacen INNER JOIN: facturas sin documento se pierden. No hay miembro desconocido."
+      ],
+      "reuse": {
+        "action": "keep",
+        "keep": ["pipeline y workflow casi completos", "NK (idsuc, prefijo)", "UPSERT"],
+        "do_not_reuse": []
+      }
+    },
+    {
+      "id": "dim_geografia",
+      "pipeline_file": "Pipelines/dim_geografia.hpl",
+      "workflow_file": "Workflows/wf_dim_geografia.hwf",
+      "silver_staging": "silver_guajiranet.stg_dim_geografia",
+      "silver_table": "silver_guajiranet.tbl_dim_geografia",
+      "bronze_sources": [
+        "bronze_guajiranet.matercerosuc",
+        "bronze_guajiranet.mabarrio",
+        "bronze_guajiranet.maciudades"
+      ],
+      "natural_key": ["id_barrio"],
+      "surrogate_key": {
+        "name": "sk_geografia",
+        "generated_in_hop": false,
+        "generation": "Identidad/serial en PostgreSQL. Hechos usan COALESCE(sk_geografia, 0), que no coincide necesariamente con la fila dummy id_barrio='0'."
+      },
+      "insert_update_strategy": {
+        "staging": "TRUNCATE + PGBulkLoader",
+        "target": "UPSERT",
+        "sql_conflict": "ON CONFLICT (id_barrio) DO UPDATE",
+        "scd": "type_1",
+        "deletes_missing_nks": false
+      },
+      "deduplication": {
+        "hop_unique": false,
+        "sql_distinct": false,
+        "sql_group_by": true,
+        "sql_distinct_on": true,
+        "notes": "Pipeline GROUP BY s.idbarrio con MAX(). Workflow SELECT DISTINCT ON (id_barrio) ORDER BY coordenada IS NOT NULL DESC, fecha_actualizacion DESC. Filtro idbarrio IS NOT NULL. Fila dummy id_barrio='0'."
+      },
+      "joins": [
+        {
+          "left": "bronze_guajiranet.matercerosuc s",
+          "type": "LEFT JOIN",
+          "right": "bronze_guajiranet.mabarrio b",
+          "on": "s.idbarrio = b.idbarrio"
+        },
+        {
+          "left": "mabarrio b",
+          "type": "LEFT JOIN",
+          "right": "bronze_guajiranet.maciudades c",
+          "on": "b.dpto = c.dpto AND b.mun = c.mun"
+        }
+      ],
+      "columns": ["id_barrio", "barrio", "municipio", "departamento", "zona", "estrato", "coordenada", "fecha_actualizacion"],
+      "duplication_risks": [
+        "MAX() mezcla zona/estrato/departamento/municipio distintos del mismo barrio (colision semantica, no filas duplicadas).",
+        "Dummy id_barrio='0' no garantiza sk_geografia=0; COALESCE(...,0) en facts puede quedar huerfano."
+      ],
+      "reuse": {
+        "action": "keep_or_fold_into_sucursal",
+        "keep": ["dummy desconocido", "GROUP BY / DISTINCT ON", "joins barrio-ciudad", "limpiezas UPPER"],
+        "do_not_reuse": ["COALESCE(sk,0) sin miembro SK=0 real"]
+      }
+    },
+    {
+      "id": "dim_servicio",
+      "pipeline_file": "Pipelines/dim_servicio.hpl",
+      "workflow_file": "Workflows/wf_dim_servicio.hwf",
+      "silver_staging": "silver_guajiranet.stg_dim_servicio",
+      "silver_table": "silver_guajiranet.tbl_dim_servicio",
+      "bronze_sources": [
+        "bronze_guajiranet.maproductos",
+        "bronze_guajiranet.mafamiliasproductos"
+      ],
+      "natural_key": ["id_servicio"],
+      "natural_key_source": "maproductos.idproducto AS id_servicio",
+      "surrogate_key": {
+        "name": "sk_servicio",
+        "generated_in_hop": false,
+        "generation": "Identidad/serial en PostgreSQL. Consumida por fact_facturacion."
+      },
+      "insert_update_strategy": {
+        "staging": "TRUNCATE + PGBulkLoader",
+        "target": "UPSERT",
+        "sql_conflict": "ON CONFLICT (id_servicio) DO UPDATE",
+        "scd": "type_1",
+        "deletes_missing_nks": false
+      },
+      "deduplication": {
+        "hop_unique": false,
+        "sql_distinct": false,
+        "sql_group_by": false,
+        "sql_distinct_on": false,
+        "notes": "Sin deduplicacion."
+      },
+      "joins": [
+        {
+          "left": "bronze_guajiranet.maproductos p",
+          "type": "LEFT JOIN",
+          "right": "bronze_guajiranet.mafamiliasproductos f",
+          "on": "p.idfam1 = f.idfamilia"
+        }
+      ],
+      "columns": ["id_servicio", "nombre_plan", "categoria", "tarifa_mensual", "estado_activo", "fecha_actualizacion"],
+      "column_aliases": {
+        "id_servicio": "maproductos.idproducto",
+        "nombre_plan": "maproductos.nombreproducto",
+        "categoria": "mafamiliasproductos.familia",
+        "tarifa_mensual": "maproductos.lista1",
+        "estado_activo": "maproductos.activo"
+      },
+      "duplication_risks": [
+        "Catalogo ERP presentado como plan/servicio (colision semantica PLAN vs PRODUCTO_ERP).",
+        "LEFT JOIN a familia puede repetir si idfamilia no es unico.",
+        "lista1 es precio de lista, no tarifa contractual."
+      ],
+      "reuse": {
+        "action": "split",
+        "keep": ["fuente maproductos + familia", "UPSERT por idproducto", "limpiezas"],
+        "do_not_reuse": ["alias nombre_plan sobre nombreproducto como DIM_PLAN"]
+      }
+    },
+    {
+      "id": "dim_tiempo",
+      "pipeline_file": "Pipelines/dim_tiempo.hpl",
+      "workflow_file": "Workflows/wf_dim_tiempo.hwf",
+      "silver_staging": "silver_guajiranet.stg_dim_tiempo",
+      "silver_table": "silver_guajiranet.tbl_dim_tiempo",
+      "bronze_sources": [],
+      "bronze_note": "No usa Bronze. generate_series DATE 2020-01-01 .. 2035-12-31.",
+      "natural_key": ["sk_tiempo"],
+      "surrogate_key": {
+        "name": "sk_tiempo",
+        "generated_in_hop": true,
+        "generation": "TO_CHAR(d,'YYYYMMDD')::INTEGER. Smart key = NK."
+      },
+      "insert_update_strategy": {
+        "staging": "TRUNCATE + PGBulkLoader",
+        "target": "UPSERT",
+        "sql_conflict": "ON CONFLICT (sk_tiempo) DO UPDATE",
+        "sql_insert_shape": "INSERT INTO tbl_dim_tiempo SELECT * FROM stg_dim_tiempo",
+        "scd": "type_1",
+        "deletes_missing_nks": false
+      },
+      "deduplication": {
+        "hop_unique": false,
+        "sql_distinct": false,
+        "sql_group_by": false,
+        "sql_distinct_on": false,
+        "notes": "Unicidad inherente a generate_series diario."
+      },
+      "joins": [],
+      "columns": ["sk_tiempo", "fecha", "anio", "semestre", "trimestre", "mes", "nombre_mes", "semana", "dia", "nombre_dia", "dia_semana", "es_fin_semana"],
+      "duplication_risks": [
+        "INSERT SELECT * depende del orden de columnas de stg vs tbl.",
+        "Fechas fuera de 2020-2035 no hacen match en fact_cartera (INNER JOIN)."
+      ],
+      "reuse": {
+        "action": "keep",
+        "keep": ["pipeline y workflow completos", "smart key YYYYMMDD", "calendario"],
+        "do_not_reuse": ["INSERT SELECT * (preferir lista explicita de columnas)"]
+      }
+    },
+    {
+      "id": "fact_cartera",
+      "pipeline_file": "Pipelines/fact_cartera.hpl",
+      "workflow_file": "Workflows/wf_fact_cartera.hwf",
+      "silver_staging": "silver_guajiranet.stg_fact_cartera",
+      "silver_table": "silver_guajiranet.tbl_fact_cartera",
+      "bronze_sources": ["bronze_guajiranet.vmovcartera"],
+      "natural_key": ["sk_cliente", "cuenta", "ref_doc", "ref_num", "plazo"],
+      "surrogate_key": {
+        "name": null,
+        "generated_in_hop": false,
+        "lookups": ["sk_cliente", "sk_tiempo"],
+        "generation": "No inserta SK de hecho. Lookups a tbl_dim_cliente y tbl_dim_tiempo."
+      },
+      "insert_update_strategy": {
+        "staging": "TRUNCATE + PGBulkLoader",
+        "target": "UPSERT",
+        "sql_conflict": "ON CONFLICT (sk_cliente, cuenta, ref_doc, ref_num, plazo) DO UPDATE",
+        "scd": "type_1_snapshot_measures",
+        "deletes_missing_nks": false
+      },
+      "deduplication": {
+        "hop_unique": false,
+        "sql_distinct": true,
+        "sql_group_by": false,
+        "sql_distinct_on": false,
+        "notes": "CTE cartera_limpia SELECT DISTINCT de todas las columnas incluyendo saldo, fecha, fvence, dias. No es DISTINCT ON la NK de conflicto."
+      },
+      "joins": [
+        {
+          "left": "cartera_limpia c (vmovcartera)",
+          "type": "INNER JOIN",
+          "right": "silver_guajiranet.tbl_dim_cliente dc",
+          "on": "CAST(c.nit AS VARCHAR(30)) = dc.nit AND c.sucursal = dc.idsuc"
+        },
+        {
+          "left": "cartera_limpia c",
+          "type": "INNER JOIN",
+          "right": "silver_guajiranet.tbl_dim_tiempo dt",
+          "on": "c.fecha = dt.fecha"
+        }
+      ],
+      "columns": ["sk_cliente", "sk_tiempo", "cuenta", "ref_doc", "ref_num", "plazo", "fecha_vencimiento", "dias", "saldo", "fecha_actualizacion"],
+      "duplication_risks": [
+        "DISTINCT no colapsa por NK de conflicto; dos filas con misma NK y distinto saldo/fecha fallan ON CONFLICT.",
+        "INNER JOIN a cliente y tiempo descarta movimientos huerfanos (perdida, no fan-out).",
+        "Todo el grano de cliente cuelga de sk_cliente (persona+sucursal mezclados)."
+      ],
+      "reuse": {
+        "action": "reuse_source_replace_lookups",
+        "keep": ["fuente vmovcartera", "CTE de limpieza", "UPSERT", "medidas saldo/plazo/dias/vencimiento"],
+        "do_not_reuse": ["lookup unico a sk_cliente"]
+      }
+    },
+    {
+      "id": "fact_facturacion",
+      "pipeline_file": "Pipelines/fact_facturacion.hpl",
+      "workflow_file": "Workflows/wf_fact_facturacion.hwf",
+      "silver_staging": "silver_guajiranet.stg_fact_facturacion",
+      "silver_table": "silver_guajiranet.tbl_fact_facturacion",
+      "bronze_sources": [
+        "bronze_guajiranet.trfacturas",
+        "bronze_guajiranet.trfacturasdet",
+        "bronze_guajiranet.matercerosuc"
+      ],
+      "natural_key": ["sk_documento", "numero_factura", "posicion_factura"],
+      "surrogate_key": {
+        "name": null,
+        "generated_in_hop": false,
+        "lookups": ["sk_cliente", "sk_servicio", "sk_geografia", "sk_documento"],
+        "generation": "No inserta SK de hecho. Select values fuerza tipos Integer/Number/Date/Timestamp."
+      },
+      "insert_update_strategy": {
+        "staging": "TRUNCATE + PGBulkLoader",
+        "target": "UPSERT",
+        "sql_conflict": "ON CONFLICT (sk_documento, numero_factura, posicion_factura) DO UPDATE",
+        "scd": "type_1_snapshot_measures",
+        "deletes_missing_nks": false
+      },
+      "deduplication": {
+        "hop_unique": false,
+        "sql_distinct": false,
+        "sql_group_by": false,
+        "sql_distinct_on": false,
+        "notes": "Sin deduplicacion."
+      },
+      "joins": [
+        {
+          "left": "bronze_guajiranet.trfacturas f",
+          "type": "INNER JOIN",
+          "right": "bronze_guajiranet.trfacturasdet d",
+          "on": "f.idsuc = d.idsuc AND f.prefijo = d.prefijo AND f.numero = d.numero"
+        },
+        {
+          "left": "f",
+          "type": "INNER JOIN",
+          "right": "silver_guajiranet.tbl_dim_cliente dc",
+          "on": "CAST(f.nit AS VARCHAR(30)) = dc.nit AND f.sucursal = dc.idsuc"
+        },
+        {
+          "left": "d",
+          "type": "INNER JOIN",
+          "right": "silver_guajiranet.tbl_dim_servicio ds",
+          "on": "d.idproducto = ds.id_servicio"
+        },
+        {
+          "left": "f",
+          "type": "INNER JOIN",
+          "right": "silver_guajiranet.tbl_dim_documento dd",
+          "on": "f.idsuc = dd.idsuc AND f.prefijo = dd.prefijo"
+        },
+        {
+          "left": "f",
+          "type": "LEFT JOIN",
+          "right": "bronze_guajiranet.matercerosuc ms",
+          "on": "f.nit = ms.nit AND f.sucursal = ms.idsuc"
+        },
+        {
+          "left": "ms",
+          "type": "LEFT JOIN",
+          "right": "silver_guajiranet.tbl_dim_geografia dg",
+          "on": "COALESCE(CAST(ms.idbarrio AS VARCHAR(20)), '0') = dg.id_barrio"
+        }
+      ],
+      "columns": ["sk_cliente", "sk_servicio", "sk_geografia", "sk_documento", "fecha_factura", "numero_factura", "posicion_factura", "cantidad", "precio", "subtotal", "iva", "neto", "fecha_actualizacion"],
+      "duplication_risks": [
+        "LEFT JOIN matercerosuc puede multiplicar lineas si (nit, idsuc) no es unico.",
+        "INNER JOIN a cliente/servicio/documento pierde lineas no dimensionadas.",
+        "COALESCE(sk_geografia, 0) no apunta al dummy id_barrio='0'.",
+        "NK de conflicto no incluye producto ni sucursal: un cambio de producto reescribe la linea.",
+        "Fecha degenerada; no hay sk_tiempo."
+      ],
+      "reuse": {
+        "action": "reuse_source_replace_lookups",
+        "keep": ["cabecera+detalle trfacturas/trfacturasdet", "grain de linea", "medidas", "join documento (idsuc, prefijo)"],
+        "do_not_reuse": ["lookups a sk_cliente y sk_servicio", "COALESCE(sk_geografia,0)"]
+      }
+    }
+  ],
+  "workflows": [
+    {
+      "id": "wf_actualizacion_silver",
+      "file": "Workflows/wf_actualizacion_silver.hwf",
+      "role": "orquestador_silver",
+      "internal_name": "New workflow",
+      "silver_tables": "todas las tbl_dim_* y tbl_fact_* via sub-workflows",
+      "sequence": [
+        "wf_dim_geografia.hwf",
+        "wf_dim_cliente.hwf",
+        "wf_dim_documento.hwf",
+        "wf_dim_servicio.hwf",
+        "wf_dim_tiempo.hwf",
+        "wf_fact_facturacion.hwf",
+        "wf_fact_cartera.hwf"
+      ],
+      "notes": [
+        "Cadena serial on-success con nodos Success intermedios.",
+        "Dimensiones independientes se serializan sin necesidad.",
+        "Hechos al final: correcto.",
+        "No es llamado por wf_delta ni wf_historic en estos archivos.",
+        "Loglevel de sub-workflows: Nothing."
+      ]
+    },
+    {
+      "id": "wf_delta",
+      "file": "Workflows/wf_delta.hwf",
+      "role": "carga_bronze_delta",
+      "sequence": [
+        "SQL 03_drop_all_fk.sql",
+        "SHELL /opt/guajiranet-etl/bin/run_delta.sh",
+        "SQL 04_create_fk.sql",
+        "Success"
+      ],
+      "external_paths": [
+        "/home/arra/guajiranet-etl/sql/fase2/03_drop_all_fk.sql",
+        "/opt/guajiranet-etl/bin/run_delta.sh",
+        "/home/arra/guajiranet-etl/sql/fase2/04_create_fk.sql"
+      ],
+      "hop_risks": [
+        "Drop -> ETL es incondicional: el delta corre aunque falle el drop de FKs.",
+        "Create -> Success es incondicional: puede marcar exito con FKs rotas.",
+        "ETL -> Create es on-success."
+      ],
+      "notes": "No construye tablas Silver. Scripts fuera del repo Hop."
+    },
+    {
+      "id": "wf_historic",
+      "file": "Workflows/wf_historic.hwf",
+      "role": "carga_bronze_historica",
+      "sequence": [
+        "SHELL /home/arra/guajiranet-etl/bin/etl_historic_data.sh",
+        "Success"
+      ],
+      "external_paths": ["/home/arra/guajiranet-etl/bin/etl_historic_data.sh"],
+      "notes": "No construye tablas Silver. Ruta /home/arra distinta de wf_delta (/opt). Success solo on-success del shell."
+    }
+  ],
+  "dependencies": {
+    "graph": [
+      {"from": "materceros + matercerosuc", "to": "dim_cliente"},
+      {"from": "madocumentos", "to": "dim_documento"},
+      {"from": "matercerosuc + mabarrio + maciudades", "to": "dim_geografia"},
+      {"from": "maproductos + mafamiliasproductos", "to": "dim_servicio"},
+      {"from": "generate_series", "to": "dim_tiempo"},
+      {"from": "dim_cliente", "to": "fact_cartera"},
+      {"from": "dim_tiempo", "to": "fact_cartera"},
+      {"from": "vmovcartera", "to": "fact_cartera"},
+      {"from": "dim_cliente", "to": "fact_facturacion"},
+      {"from": "dim_servicio", "to": "fact_facturacion"},
+      {"from": "dim_documento", "to": "fact_facturacion"},
+      {"from": "dim_geografia", "to": "fact_facturacion"},
+      {"from": "trfacturas + trfacturasdet", "to": "fact_facturacion"},
+      {"from": "matercerosuc", "to": "fact_facturacion", "role": "lookup_barrio"}
+    ],
+    "runtime_order_actual": [
+      "wf_dim_geografia",
+      "wf_dim_cliente",
+      "wf_dim_documento",
+      "wf_dim_servicio",
+      "wf_dim_tiempo",
+      "wf_fact_facturacion",
+      "wf_fact_cartera"
+    ],
+    "dimension_independence": "Las cinco dimensiones no se leen entre si. Solo los facts dependen de dims ya upsertadas.",
+    "bronze_vs_silver": "wf_historic y wf_delta no tienen arista hacia wf_actualizacion_silver. Condicion de carrera operativa si se lanzan por separado."
+  },
+  "reuse_for_new_model": {
+    "keep_as_is": [
+      "dim_tiempo.hpl + wf_dim_tiempo.hwf",
+      "dim_documento.hpl + wf_dim_documento.hwf",
+      "patron staging TRUNCATE + UPSERT Tipo 1",
+      "conexion aws_rds y esquemas bronze/silver",
+      "esqueleto wf_actualizacion_silver (dims luego facts)",
+      "wf_historic y wf_delta como wrappers Bronze",
+      "fuentes trfacturas, trfacturasdet, vmovcartera",
+      "limpiezas String operations"
+    ],
+    "reuse_as_seed": [
+      {
+        "from": "materceros en dim_cliente",
+        "to": "DIM_PERSONA"
+      },
+      {
+        "from": "matercerosuc + atributos de dim_cliente",
+        "to": "DIM_SUCURSAL"
+      },
+      {
+        "from": "dim_geografia",
+        "to": "atributos/FK de DIM_SUCURSAL o dim geo mantenida"
+      },
+      {
+        "from": "dim_servicio / maproductos",
+        "to": "DIM_PRODUCTO_ERP y posible catalogo de DIM_PLAN"
+      },
+      {
+        "from": "joins de factura (idsuc, prefijo, numero) y documento (idsuc, prefijo)",
+        "to": "facts nuevos"
+      }
+    ],
+    "replace": [
+      "dim_cliente como dimension unica",
+      "dim_servicio como plan/servicio",
+      "lookups de facts a sk_cliente y sk_servicio",
+      "COALESCE(sk_geografia, 0)",
+      "INSERT SELECT * de dim_tiempo",
+      "hops incondicionales de wf_delta",
+      "nombres internos New workflow"
+    ]
+  },
+  "target_model_mapping": {
+    "DIM_PERSONA": {
+      "corresponds_to": ["parte persona de dim_cliente / materceros"],
+      "bronze": ["bronze_guajiranet.materceros"],
+      "candidate_nk": ["nit"],
+      "candidate_attributes": ["razonsocial", "documento_identidad", "tipo_persona", "es_cliente"],
+      "current_gap": "Hoy el grano es (nit, idsuc). No existe DIM a grano persona.",
+      "action": "crear_nueva_partiendo_de_dim_cliente"
+    },
+    "DIM_SUCURSAL": {
+      "corresponds_to": ["parte sucursal de dim_cliente / matercerosuc", "lookups nit+idsuc en facts", "atributos geo en dim_geografia"],
+      "bronze": ["bronze_guajiranet.matercerosuc"],
+      "candidate_nk": ["nit", "idsuc"],
+      "candidate_attributes": ["ciudad", "direccion", "email", "movil", "estado_activo", "idbarrio", "zona", "estrato", "departamento", "coordenada"],
+      "current_gap": "La NK actual de tbl_dim_cliente ES el grano de sucursal, pero mezclado con persona.",
+      "action": "crear_nueva_partiendo_de_dim_cliente_y_matercerosuc"
+    },
+    "DIM_PLAN": {
+      "corresponds_to": ["alias semantico debil de dim_servicio.nombre_plan"],
+      "bronze": ["bronze_guajiranet.maproductos (solo si el plan = producto ERP)"],
+      "candidate_nk": ["idproducto"],
+      "current_gap": "No hay maestro de plan distinto de maproductos. No hay vigencia, velocidad ni vinculo a contrato. tarifa_mensual es lista1.",
+      "action": "no_se_puede_extraer_fielmente_sin_fuente_bronze_adicional"
+    },
+    "DIM_CONTRATO": {
+      "corresponds_to": [],
+      "bronze": [],
+      "candidate_nk": [],
+      "current_gap": "Ausente en los 17 archivos. Ningun pipeline, NK, SK ni join de hechos.",
+      "action": "crear_desde_cero_cuando_exista_fuente_bronze"
+    },
+    "DIM_PRODUCTO_ERP": {
+      "corresponds_to": ["dim_servicio completo", "lookup d.idproducto en fact_facturacion"],
+      "bronze": ["bronze_guajiranet.maproductos", "bronze_guajiranet.mafamiliasproductos"],
+      "candidate_nk": ["idproducto"],
+      "candidate_attributes": ["nombreproducto", "familia", "lista1", "activo"],
+      "current_gap": "Existe pero se llama servicio/plan.",
+      "action": "renombrar_y_regranular_dim_servicio"
+    },
+    "keep": [
+      "dim_tiempo / tbl_dim_tiempo",
+      "dim_documento / tbl_dim_documento",
+      "dim_geografia / tbl_dim_geografia (si ubicacion sigue independiente; si no, plegar a sucursal)",
+      "patron staging + UPSERT",
+      "wf_historic y wf_delta como carga Bronze",
+      "fuentes de fact_facturacion y fact_cartera",
+      "orquestador Silver (cambiar hijos)"
+    ],
+    "replace": [
+      "dim_cliente + tbl_dim_cliente + sk_cliente -> DIM_PERSONA + DIM_SUCURSAL",
+      "dim_servicio + tbl_dim_servicio + sk_servicio -> DIM_PRODUCTO_ERP (+ DIM_PLAN si hay fuente)",
+      "lookups de fact_facturacion y fact_cartera a sk_cliente/sk_servicio",
+      "crear DIM_CONTRATO y wf asociados",
+      "lista de hijos de wf_actualizacion_silver"
+    ]
+  },
+  "suggested_future_order": [
+    "Bronze: wf_historic / wf_delta",
+    "dim_tiempo, dim_documento, dim_geografia",
+    "DIM_PERSONA, DIM_PRODUCTO_ERP, DIM_PLAN (si hay fuente)",
+    "DIM_SUCURSAL (despues de persona y geo si hay FKs)",
+    "DIM_CONTRATO",
+    "facts re-linkeados"
+  ]
+}

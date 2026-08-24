@@ -1,0 +1,241 @@
+{
+  "title": "cutover_silver_plan",
+  "date": "2026-08-24",
+  "executed": false,
+  "files_modified": false,
+  "objective": "REPLACE same-name Silver objects (geo + facturacion + cartera + staging) without leaving gold_guajiranet invalid after the maintenance window",
+  "constraint": "New tbl_fact_facturacion cannot be created while the old table occupies the name. Gold cannot be rewritten to the new layout before DROP. A downtime window is mandatory.",
+  "replace_objects": [
+    {"table": "tbl_dim_geografia", "script07": "B", "old_detector": "id_barrio varchar/text", "gold": "probable join via sk_geografia"},
+    {"table": "stg_dim_geografia", "script07": "B", "old_detector": "id_barrio varchar/text", "gold": false},
+    {"table": "tbl_fact_facturacion", "script07": "B", "old_detector": "posicion_factura AND NOT pos", "gold": true},
+    {"table": "stg_fact_facturacion", "script07": "B", "old_detector": "posicion_factura AND NOT pos", "gold": false},
+    {"table": "tbl_fact_cartera", "script07": "B", "old_detector": "sk_cliente AND NOT idsuc", "gold": false},
+    {"table": "stg_fact_cartera", "script07": "B", "old_detector": "sk_cliente AND NOT idsuc", "gold": false}
+  ],
+  "do_not_run_now": {
+    "07_section_A": ["stg_dim_cliente", "tbl_dim_cliente", "tbl_dim_cliente_sk_cliente_seq", "stg_dim_servicio", "tbl_dim_servicio", "tbl_dim_servicio_sk_servicio_seq"],
+    "reason": "Gold star still uses dim_cliente/dim_servicio. 07 file runs A then B with CASCADE; running the whole file drops Gold even before facts are rebuilt. Old orchestrator wf_actualizacion_silver still loads those tables."
+  },
+  "gold": {
+    "schema": "gold_guajiranet",
+    "ddl_in_this_repo": false,
+    "source_of_names": ["discovery/silver_ddl_plan.json gold_impact", "Guajiranet-dimensiones model_audit.json gold_views"],
+    "hard_gate_before_drop": "SELECT pg_get_viewdef for every gold_guajiranet view/matview; also pg_depend from silver_preflight.sql section 7",
+    "views_depending_on_tbl_fact_facturacion": [
+      {
+        "name": "vw_capilaridad_servicios",
+        "reads_fact_facturacion": true,
+        "reads_fact_cartera": false,
+        "output_fields_known": ["categoria", "nombre_plan", "clientes_atendidos", "municipios", "barrios", "facturas", "ingresos"]
+      },
+      {
+        "name": "vw_cobertura_geografica",
+        "reads_fact_facturacion": true,
+        "reads_fact_cartera": false,
+        "output_fields_known": ["departamento", "municipio", "barrio", "clientes", "facturas", "servicios", "valor_facturado"]
+      },
+      {
+        "name": "vw_comportamientos_atipicos",
+        "reads_fact_facturacion": true,
+        "reads_fact_cartera": false,
+        "rule": "MAX(ff.neto) > AVG(ff.neto) * 2 → FACTURACION ATIPICA else COMPORTAMIENTO NORMAL",
+        "output_fields_known": ["nit", "razonsocial", "ciudad", "cantidad_facturas", "total_facturado", "promedio", "maximo", "minimo", "clasificacion"]
+      },
+      {
+        "name": "vw_operacion_facturacion",
+        "reads_fact_facturacion": true,
+        "reads_fact_cartera": false,
+        "output_fields_known": ["anio", "mes", "nombre_mes", "departamento", "municipio", "barrio", "categoria", "plan", "facturas", "cantidad", "subtotal", "iva", "neto"]
+      },
+      {
+        "name": "vw_transaccionalidad_clientes",
+        "reads_fact_facturacion": true,
+        "reads_fact_cartera": false,
+        "grain_note": "groups by nit (13715), drops idsuc",
+        "output_fields_known": ["nit", "razonsocial", "ciudad", "transacciones", "valor_total", "ticket_promedio", "primera_transaccion", "ultima_transaccion"]
+      }
+    ],
+    "inferred_old_star": {
+      "fact": "silver_guajiranet.tbl_fact_facturacion",
+      "joins": {
+        "sk_cliente": "tbl_dim_cliente",
+        "sk_servicio": "tbl_dim_servicio",
+        "sk_geografia": "tbl_dim_geografia",
+        "fecha_factura_or_sk_tiempo": "tbl_dim_tiempo"
+      },
+      "fact_columns_removed_in_v2": ["sk_cliente", "sk_servicio", "numero_factura", "posicion_factura"],
+      "fact_columns_kept": ["fecha_factura", "cantidad", "precio", "subtotal", "iva", "neto", "sk_geografia", "sk_documento", "sk_tiempo"]
+    },
+    "before_drop": [
+      "Capture pg_get_viewdef + pg_depend (SELECT only)",
+      "DROP VIEW IF EXISTS the five views (and any extras found) so 07 CASCADE is not the Gold mechanism",
+      "Do not CREATE OR REPLACE to the new layout yet (new columns do not exist)",
+      "Do not run 07 section A"
+    ],
+    "after_load_recreate": {
+      "keep_view_names": true,
+      "keep_output_column_names_for_powerbi": true,
+      "join": {
+        "tbl_fact_facturacion": "ff",
+        "tbl_dim_sucursal": "ff.sk_sucursal = suc.sk_sucursal",
+        "tbl_dim_persona": "ff.sk_persona = per.sk_persona",
+        "tbl_dim_producto_erp": "ff.sk_producto = prod.sk_producto",
+        "tbl_dim_geografia": "ff.sk_geografia = geo.sk_geografia (LEFT)",
+        "tbl_dim_tiempo": "ff.sk_tiempo = tm.sk_tiempo"
+      },
+      "column_map": {
+        "nit": "tbl_dim_persona.nit (integer; CAST to text if PBI expects varchar)",
+        "razonsocial": "tbl_dim_persona.razonsocial",
+        "ciudad": "tbl_dim_sucursal.ciudad",
+        "categoria": "tbl_dim_producto_erp.categoria",
+        "nombre_plan": "tbl_dim_producto_erp.nombre_producto AS nombre_plan",
+        "departamento_municipio_barrio": "tbl_dim_geografia (same names; zona/estrato gone)",
+        "anio_mes_nombre_mes": "tbl_dim_tiempo",
+        "medidas": "ff.cantidad, subtotal, iva, neto",
+        "clientes_atendidos": "COUNT(DISTINCT sk_sucursal) to keep sucursal grain; COUNT(DISTINCT sk_persona) if NIT grain wanted",
+        "numero_factura": "ff.numero"
+      },
+      "do_not_use_yet": ["sk_contrato", "sk_plan"],
+      "exact_sql": "DRAFT until pg_get_viewdef is captured; copy filters (anulado, etc.) from old def"
+    }
+  },
+  "orchestrator_v2": {
+    "file": "Workflows/wf_actualizacion_silver_v2.hwf",
+    "in_wf_delta_or_historic": false,
+    "hops_today": {
+      "contrato_to_sucursal": {"enabled": true},
+      "contrato_to_geografia_v2": {"enabled": false},
+      "geografia_v2_to_sucursal": {"enabled": false},
+      "pago_pasarela_to_success": {"enabled": true},
+      "pago_pasarela_to_fact_facturacion_v2": {"enabled": false},
+      "fact_facturacion_v2_to_fact_cartera_v2": {"enabled": false},
+      "fact_cartera_v2_to_success": {"enabled": false}
+    },
+    "hops_after_geo_recreate": {
+      "contrato_to_sucursal": {"enabled": false},
+      "contrato_to_geografia_v2": {"enabled": true},
+      "geografia_v2_to_sucursal": {"enabled": true},
+      "fact_hops": "keep disabled until facts loaded"
+    },
+    "hops_after_fact_recreate": {
+      "pago_pasarela_to_success": {"enabled": false},
+      "pago_pasarela_to_fact_facturacion_v2": {"enabled": true},
+      "fact_facturacion_v2_to_fact_cartera_v2": {"enabled": true},
+      "fact_cartera_v2_to_success": {"enabled": true}
+    }
+  },
+  "old_orchestrator": {
+    "file": "Workflows/wf_actualizacion_silver.hwf",
+    "loads": ["wf_dim_geografia", "wf_dim_cliente", "wf_dim_servicio", "wf_fact_facturacion", "wf_fact_cartera"],
+    "during_cutover": "STOP. Do not let old geo/fact HPL write into new layouts."
+  },
+  "order": [
+    {
+      "step": 0,
+      "name": "prereq_dual_run",
+      "when": "Gold still live",
+      "actions": [
+        "01-04 already applied for NEW-name objects",
+        "Load persona, perfil, plan, contrato, producto_erp, bridges, pagos",
+        "Sucursal may still resolve geo via CAST to old id_barrio varchar"
+      ]
+    },
+    {
+      "step": 1,
+      "name": "disable_workflows",
+      "actions": [
+        "Stop wf_actualizacion_silver and old unitarios geo/facts/cliente/servicio",
+        "Do not enable v2 in wf_delta/wf_historic",
+        "Keep v2 geo hops N and fact hops N until steps 5-6",
+        "Do not run v2 orchestrator during DROP/CREATE window"
+      ]
+    },
+    {
+      "step": 2,
+      "name": "gold_release_silver",
+      "actions": [
+        "pg_get_viewdef capture",
+        "DROP VIEW five gold views (plus extras)",
+        "Gold down until step 7"
+      ]
+    },
+    {
+      "step": 3,
+      "name": "drop_old_same_name",
+      "actions": [
+        "sql/silver/05_drop_fk.sql",
+        "07_drop_obsolete.sql SECTION B ONLY (not A, not full file)"
+      ]
+    },
+    {
+      "step": 4,
+      "name": "recreate_ddl",
+      "scripts": [
+        "sql/silver/01_create_dims.sql",
+        "sql/silver/02_create_bridges_facts.sql",
+        "sql/silver/03_create_staging.sql",
+        "sql/silver/04_seed_unknown_members.sql"
+      ]
+    },
+    {
+      "step": 5,
+      "name": "load_dims",
+      "why": "tbl_dim_sucursal.sk_geografia is stale after geo DROP",
+      "actions": [
+        "Enable v2 hops contrato→geo_v2→sucursal; disable contrato→sucursal",
+        "Run wf_dim_geografia_v2 then wf_dim_sucursal",
+        "Do not run old wf_dim_geografia"
+      ]
+    },
+    {
+      "step": 6,
+      "name": "enable_and_load_facts",
+      "actions": [
+        "Enable fact v2 hops; disable pago_pasarela→Success",
+        "Run wf_fact_facturacion_v2 then wf_fact_cartera_v2"
+      ]
+    },
+    {
+      "step": 7,
+      "name": "recreate_gold",
+      "actions": ["CREATE VIEW five views with new joins; stable output names"]
+    },
+    {
+      "step": 8,
+      "name": "create_fk",
+      "script": "sql/silver/06_create_fk.sql",
+      "when": "after first load of new facts"
+    },
+    {
+      "step": 9,
+      "name": "validate",
+      "catalog": [
+        "id_barrio integer on geo tbl/stg",
+        "pos present, posicion_factura absent on facturacion tbl/stg",
+        "idsuc present, sk_cliente absent on cartera tbl/stg",
+        "geo SK 0 and id_barrio 0",
+        "gold viewdefs must not mention sk_cliente, sk_servicio, numero_factura, posicion_factura, tbl_dim_cliente, tbl_dim_servicio"
+      ],
+      "counts": {
+        "tbl_dim_geografia": "~246 (245 mabarrio + SK 0)",
+        "tbl_fact_facturacion": "~214837 trfacturasdet; may drop if INNER JOIN misses nit/sucursal/producto",
+        "tbl_fact_cartera": "latest-open saldo<>0; not equal to old 15857"
+      }
+    }
+  ],
+  "07_file": {
+    "path": "sql/silver/07_drop_obsolete.sql",
+    "cascade": true,
+    "full_file_safe_for_this_cutover": false,
+    "run": "section B only"
+  },
+  "out_of_scope": [
+    "Edit HPL/HWF now",
+    "Split 07 into two files now",
+    "07 section A",
+    "Fill sk_contrato/sk_plan",
+    "Wire v2 into wf_delta/wf_historic",
+    "Final Gold SQL (blocked on missing viewdef in repo)"
+  ]
+}

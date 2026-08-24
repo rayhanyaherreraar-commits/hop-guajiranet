@@ -1,0 +1,16 @@
+.hop/
+*.log
+*.tmp
+_pyembed/
+_pyembed.zip
+_recover.py
+_recover.ps1
+_recover_log.txt
+discovery/_pbix_unzip/
+discovery/_pbix_extract_tmp.py
+**/.DS_Store
+Thumbs.db
+.env
+*.env
+credentials*.json
+metadata.json.bak

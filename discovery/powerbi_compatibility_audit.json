@@ -1,0 +1,199 @@
+{
+  "file": "Guajiranet (1).pbix",
+  "audited": "2026-08-24",
+  "modified_pbix_silver_hop": false,
+  "source_is_gold": false,
+  "source": {
+    "type": "Power BI Import semantic model (embedded DataModel) + published dataset RemoteArtifacts",
+    "datasetId": "fb257399-788b-450a-b765-c16798406f57",
+    "reportId": "13a21ec6-2c10-4100-a505-d66ab1422ce5",
+    "createdFrom": "Cloud",
+    "createdFromRelease": "2026.07",
+    "gold_views": "not used"
+  },
+  "tables_in_model": [
+    {"name": "dim cliente", "in_visuals": true},
+    {"name": "dim servicio", "in_visuals": true},
+    {"name": "dim geografia", "in_visuals": true},
+    {"name": "dim tiempo", "in_visuals": false, "note": "imported Silver calendar; unused by visuals"},
+    {"name": "dim tiempo dax", "in_visuals": true, "note": "DAX calendar; effective time filter"},
+    {"name": "dim Inicio Operacion Cliente", "in_visuals": false, "used_via": ["fact facturacion.Fecha Inicio Operacion", "fact facturacion.Año Mes Inicio Operacion"]},
+    {"name": "fact facturacion", "in_visuals": true},
+    {"name": "dim documento", "in_visuals": false}
+  ],
+  "columns_used": {
+    "fact facturacion": ["sk_cliente", "sk_servicio", "sk_geografia", "venta", "Fecha Inicio Operacion", "Año Mes Inicio Operacion"],
+    "dim cliente": ["razon social", "tipo persona"],
+    "dim servicio": ["nombre plan", "categoria"],
+    "dim geografia": ["departamento", "municipio", "barrio", "departamento municipio"],
+    "dim tiempo dax": ["Fecha", "Mes", "Año", "Año-Mes", "Fecha.Variación.Jerarquía de fechas.Año", "Fecha.Variación.Jerarquía de fechas.Mes", "Fecha.Variación.Jerarquía de fechas.Día"]
+  },
+  "measures_used": [
+    {"table": "fact facturacion", "name": "Clientes Atendidos", "dax": "not extracted from VertiPaq"},
+    {"table": "fact facturacion", "name": "Clientes promedio por municipio", "dax": "not extracted"},
+    {"table": "fact facturacion", "name": "Ingresos", "dax": "not extracted"},
+    {"table": "fact facturacion", "name": "% de Meta", "dax": "not extracted"},
+    {"table": "dim geografia", "name": "Municipios con Cobertura", "dax": "not extracted"},
+    {"table": "dim geografia", "name": "Barrios con Cobertura", "dax": "not extracted"}
+  ],
+  "implicit_aggregations": [
+    {"field": "fact facturacion.sk_cliente", "function_code": 2, "queryRef": "Min(fact facturacion.sk_cliente)", "ui": "Recuento / Alcance de Clientes", "compatibility": "DISTINCTCOUNT of sucursal grain SK"},
+    {"field": "dim geografia.municipio", "function_code": 2, "ui": "Extensión Territorial (Municipíos)"},
+    {"field": "fact facturacion.sk_geografia", "function_code": 2, "ui": "Profundidad Territorial (Barrios)"},
+    {"field": "fact facturacion.sk_servicio", "function_code": 2, "ui": "Amplitud de oferta (Servicios)"},
+    {"field": "fact facturacion.venta", "function_code": 0, "queryRef": "Sum(fact facturacion.venta)", "maps_to_silver": "neto"}
+  ],
+  "relationships_inferred": [
+    {"from": "fact facturacion.sk_cliente", "to": "dim cliente.sk_cliente"},
+    {"from": "fact facturacion.sk_servicio", "to": "dim servicio.sk_servicio"},
+    {"from": "fact facturacion.sk_geografia", "to": "dim geografia.sk_geografia"},
+    {"from": "fact facturacion.sk_documento", "to": "dim documento.sk_documento", "used_in_visuals": false},
+    {"from": "fact facturacion.fecha_factura", "to": "dim tiempo.fecha", "used_in_visuals": false},
+    {"from": "fact facturacion.fecha_factura", "to": "dim tiempo dax.Fecha", "used_in_visuals": true},
+    {"from": "fact facturacion", "to": "dim Inicio Operacion Cliente", "used_in_visuals": true}
+  ],
+  "pages": [
+    {"order": 1, "displayName": "Template", "id": "19ff383f6cca3a025839", "visibility": "HiddenInViewMode", "visualCount": 4},
+    {"order": 2, "displayName": "Capilaridad", "id": "ba8c72d605bba965862c", "visibility": "HiddenInViewMode", "visualCount": 12},
+    {"order": 3, "displayName": "Capilaridad Operativa", "id": "c9fce1b8ee677a8d8a9b", "visibility": "visible", "active": true, "visualCount": 16},
+    {"order": 4, "displayName": "Capilaridad Apertura", "id": "b45b1c00aa707dda1601", "visibility": "visible", "visualCount": 17},
+    {"order": 5, "displayName": "Duplicado de Capilaridad Apertura", "id": "5cd0b4169604ec38203b", "visibility": "visible", "visualCount": 12}
+  ],
+  "visuals_summary": {
+    "Template": [
+      {"type": "image", "fields": []},
+      {"type": "textbox", "fields": []},
+      {"type": "slicer", "fields": ["dim tiempo dax.Fecha"]},
+      {"type": "slicer", "fields": ["dim geografia.departamento"]}
+    ],
+    "Capilaridad": [
+      {"type": "image", "fields": []},
+      {"type": "textbox", "fields": []},
+      {"type": "cardVisual", "measure": "Clientes Atendidos"},
+      {"type": "cardVisual", "measure": "Ingresos"},
+      {"type": "cardVisual", "measure": "Municipios con Cobertura"},
+      {"type": "cardVisual", "measure": "Barrios con Cobertura"},
+      {"type": "slicer", "fields": ["dim tiempo dax.Fecha"]},
+      {"type": "slicer", "fields": ["dim geografia.departamento"]},
+      {"type": "azureMap", "fields": ["dim geografia.departamento municipio", "Clientes Atendidos"]},
+      {"type": "clusteredBarChart", "title": "Clientes por plan", "fields": ["dim servicio.nombre plan", "Clientes Atendidos"]},
+      {"type": "clusteredBarChart", "fields": ["dim geografia.municipio", "Ingresos"]},
+      {"type": "barChart", "title": "Clientes por municipio", "fields": ["dim geografia.municipio", "Clientes Atendidos"]}
+    ],
+    "Capilaridad Operativa": [
+      {"type": "card", "displayName": "Alcance de Clientes", "fields": ["fact facturacion.sk_cliente"]},
+      {"type": "card", "displayName": "Extensión Territorial (Municipíos)", "fields": ["dim geografia.municipio"]},
+      {"type": "card", "displayName": "Profundidad Territorial (Barrios)", "fields": ["fact facturacion.sk_geografia"]},
+      {"type": "card", "displayName": "Amplitud de oferta (Servicios)", "fields": ["fact facturacion.sk_servicio"]},
+      {"type": "card", "fields": ["SUM fact facturacion.venta"]},
+      {"type": "slicer", "fields": ["dim tiempo dax.Año-Mes"]},
+      {"type": "slicer", "fields": ["dim servicio.categoria"]},
+      {"type": "slicer", "fields": ["dim geografia.departamento"]},
+      {"type": "azureMap", "fields": ["departamento", "municipio", "Clientes Atendidos", "sk_cliente sort"]},
+      {"type": "clusteredBarChart", "title": "Top municipios por clientes atendidos", "fields": ["departamento", "municipio", "Clientes Atendidos"]},
+      {"type": "lineChart", "title": "Evolución de clientes atendidos", "fields": ["dim tiempo dax date hierarchy", "Clientes Atendidos"]},
+      {"type": "clusteredBarChart", "title": "Clientes atendidos por servicio", "fields": ["nombre plan", "tipo persona inactive", "Clientes Atendidos"]},
+      {"type": "clusteredBarChart", "title": "Clientes atendidos por barrio", "fields": ["barrio", "Clientes promedio por municipio"]}
+    ],
+    "Capilaridad Apertura": [
+      {"type": "card", "displayName": "Clientes Vinculados", "measure": "Clientes Atendidos"},
+      {"type": "card", "displayName": "% para la Meta", "measure": "% de Meta"},
+      {"type": "slicer", "fields": ["fact facturacion.Año Mes Inicio Operacion"]},
+      {"type": "lineChart", "fields": ["fact facturacion.Fecha Inicio Operacion", "Clientes Atendidos"]},
+      {"type": "azureMap", "fields": ["departamento", "municipio", "Clientes Atendidos"]},
+      {"type": "clusteredBarChart", "title": "Top municipios por clientes vinculados", "fields": ["departamento", "municipio", "Clientes Atendidos"]},
+      {"type": "clusteredBarChart", "title": "Clientes vinculados por servicio", "fields": ["nombre plan", "Clientes Atendidos"]},
+      {"type": "clusteredBarChart", "title": "barrio", "fields": ["barrio", "Clientes promedio por municipio"]}
+    ],
+    "Duplicado de Capilaridad Apertura": [
+      {"type": "pivotTable", "columns": ["Fecha Año", "Fecha Mes"], "rows": ["departamento", "municipio", "nombre plan", "razon social"], "values": ["Sum venta"]},
+      {"type": "slicer", "fields": ["Año", "Mes", "Fecha", "departamento", "municipio", "categoria", "nombre plan", "razon social"]}
+    ]
+  },
+  "must_keep_for_pbix_compatibility": {
+    "tables": ["fact facturacion", "dim cliente", "dim servicio", "dim geografia", "dim tiempo dax"],
+    "columns": [
+      "fact facturacion.sk_cliente",
+      "fact facturacion.sk_servicio",
+      "fact facturacion.sk_geografia",
+      "fact facturacion.venta",
+      "fact facturacion.Fecha Inicio Operacion",
+      "fact facturacion.Año Mes Inicio Operacion",
+      "dim cliente.razon social",
+      "dim servicio.nombre plan",
+      "dim servicio.categoria",
+      "dim geografia.departamento",
+      "dim geografia.municipio",
+      "dim geografia.barrio",
+      "dim geografia.departamento municipio",
+      "dim tiempo dax.Fecha",
+      "dim tiempo dax.Mes",
+      "dim tiempo dax.Año",
+      "dim tiempo dax.Año-Mes"
+    ],
+    "measures": ["Clientes Atendidos", "Clientes promedio por municipio", "Ingresos", "% de Meta", "Municipios con Cobertura", "Barrios con Cobertura"],
+    "grain": "sk_cliente must remain sucursal (nit+idsuc), not nit/persona"
+  },
+  "entity_map": {
+    "dim cliente": {
+      "pbi": "dim cliente",
+      "silver_old": "tbl_dim_cliente",
+      "silver_new": ["tbl_dim_sucursal", "tbl_dim_persona"],
+      "pbi_columns": ["razon social", "tipo persona"],
+      "compat": "expose view named dim cliente at sucursal grain; sk_sucursal AS sk_cliente"
+    },
+    "dim servicio": {
+      "pbi": "dim servicio",
+      "silver_old": "tbl_dim_servicio",
+      "silver_new": "tbl_dim_producto_erp",
+      "pbi_columns": ["nombre plan", "categoria"],
+      "note": "ERP SKU not ISP plan",
+      "compat": "nombre_producto AS [nombre plan]; sk_producto AS sk_servicio"
+    },
+    "dim geografia": {
+      "pbi": "dim geografia",
+      "silver_old": "tbl_dim_geografia id_barrio varchar",
+      "silver_new": "tbl_dim_geografia id_barrio integer",
+      "pbi_columns": ["departamento", "municipio", "barrio", "departamento municipio"],
+      "compat": "keep attribute names; recalculate SK and coverage measures after cutover"
+    },
+    "dim tiempo": {
+      "pbi": "dim tiempo",
+      "silver": "tbl_dim_tiempo KEEP",
+      "in_visuals": false
+    },
+    "dim tiempo dax": {
+      "pbi": "dim tiempo dax",
+      "silver": "none — DAX table in PBIX",
+      "in_visuals": true,
+      "compat": "keep in Power BI; relate to fecha_factura"
+    },
+    "dim Inicio Operacion Cliente": {
+      "pbi": "dim Inicio Operacion Cliente",
+      "silver": "none",
+      "used_as": "calculated columns on fact",
+      "compat": "MIN(fecha_factura) per sk_sucursal"
+    },
+    "fact facturacion": {
+      "pbi": "fact facturacion",
+      "silver_old": "tbl_fact_facturacion",
+      "silver_new": "tbl_fact_facturacion (sk_sucursal, sk_producto, pos, neto)",
+      "compat_aliases": {
+        "sk_cliente": "sk_sucursal",
+        "sk_servicio": "sk_producto",
+        "venta": "neto"
+      }
+    }
+  },
+  "compatibility_layer": {
+    "purpose": "Keep PBIX visuals without edits",
+    "not_gold": true,
+    "sql_or_powerquery_aliases": {
+      "fact facturacion.sk_cliente": "sk_sucursal",
+      "fact facturacion.sk_servicio": "sk_producto",
+      "fact facturacion.venta": "neto",
+      "dim cliente": "tbl_dim_sucursal JOIN tbl_dim_persona",
+      "dim servicio": "tbl_dim_producto_erp"
+    }
+  }
+}
