@@ -493,7 +493,7 @@ INNER JOIN silver_guajiranet.tbl_dim_tiempo tm
     </mapping>
     <schema>silver_guajiranet</schema>
     <stop_on_error>N</stop_on_error>
-    <table>stg_fact_cartera</table>
+    <table>stg_fact_cartera_v2</table>
     <attributes/>
     <GUI>
       <xloc>688</xloc>

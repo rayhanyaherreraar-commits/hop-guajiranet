@@ -3,7 +3,7 @@
   <name>wf_actualizacion_silver_v2</name>
   <name_sync_with_filename>Y</name_sync_with_filename>
   <description/>
-  <extended_description>Orquestador Silver definitivo. NO activar en wf_delta/historic. Hops de fact_facturacion_v2 y fact_cartera_v2 deshabilitados hasta cutover de stg.</extended_description>
+  <extended_description>Orquestador Silver definitivo (dual-run). Dimensiones/bridges primero, facts después. Geo/facts van a objetos *_v2. NO activar en wf_delta/historic. NO ejecutar 06/07 desde este workflow.</extended_description>
   <created_user>-</created_user>
   <modified_user>-</modified_user>
   <created_date>2026/08/24 16:50:00.000</created_date>
@@ -470,7 +470,7 @@
       <to>wf_dim_sucursal.hwf</to>
       <evaluation>Y</evaluation>
       <unconditional>N</unconditional>
-      <enabled>Y</enabled>
+      <enabled>N</enabled>
     </hop>    <hop>
       <from>wf_dim_sucursal.hwf</from>
       <to>wf_dim_producto_erp.hwf</to>
@@ -506,41 +506,41 @@
       <to>Success</to>
       <evaluation>Y</evaluation>
       <unconditional>N</unconditional>
-      <enabled>Y</enabled>
+      <enabled>N</enabled>
     </hop>    <hop>
       <from>wf_dim_contrato.hwf</from>
       <to>wf_dim_geografia_v2.hwf</to>
       <evaluation>Y</evaluation>
       <unconditional>N</unconditional>
-      <enabled>N</enabled>
+      <enabled>Y</enabled>
     </hop>    <hop>
       <from>wf_dim_geografia_v2.hwf</from>
       <to>wf_dim_sucursal.hwf</to>
       <evaluation>Y</evaluation>
       <unconditional>N</unconditional>
-      <enabled>N</enabled>
+      <enabled>Y</enabled>
     </hop>    <hop>
       <from>wf_fact_pago_pasarela.hwf</from>
       <to>wf_fact_facturacion_v2.hwf</to>
       <evaluation>Y</evaluation>
       <unconditional>N</unconditional>
-      <enabled>N</enabled>
+      <enabled>Y</enabled>
     </hop>    <hop>
       <from>wf_fact_facturacion_v2.hwf</from>
       <to>wf_fact_cartera_v2.hwf</to>
       <evaluation>Y</evaluation>
       <unconditional>N</unconditional>
-      <enabled>N</enabled>
+      <enabled>Y</enabled>
     </hop>    <hop>
       <from>wf_fact_cartera_v2.hwf</from>
       <to>Success</to>
       <evaluation>Y</evaluation>
       <unconditional>N</unconditional>
-      <enabled>N</enabled>
+      <enabled>Y</enabled>
     </hop>  </hops>
   <notepads>
     <notepad>
-      <note>BLOQUEO: no ejecutar fact_facturacion_v2 ni fact_cartera_v2 hasta REPLACE de sus stg (07 B + 03). Hops deshabilitados. NO ejecutar 07_drop_obsolete.sql desde este workflow. DDL 01-04 y 06 es prerrequisito, no se corre aqui. dim_geografia_v2 comparte stg con el HPL viejo: no programar este orquestador hasta cutover de geo o saltar ese paso.</note>
+      <note>Dual-run: geo/facts escriben *_v2 (no tocan tablas viejas). Orden: dims KEEP + nuevas + geo_v2 + sucursal + producto + bridges + pagos + facturacion_v2 + cartera_v2. NO ejecutar 07_drop_obsolete.sql ni 06_create_fk.sql desde este workflow. DDL local: 01→02→03→04→08. No activar en wf_delta/historic.</note>
       <fontname>Segoe UI</fontname>
       <fontsize>9</fontsize>
       <fontbold>N</fontbold>

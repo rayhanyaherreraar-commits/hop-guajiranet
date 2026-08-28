@@ -45,7 +45,7 @@
     <connection>aws_rds</connection>
     <execute_each_row>N</execute_each_row>
     <limit>0</limit>
-    <sql>SELECT
+    <sql>SELECT DISTINCT ON (p.idproducto)
     p.idproducto AS id_producto,
     p.nombreproducto AS nombre_producto,
     p.idfam1 AS id_familia,
@@ -55,7 +55,9 @@
     CURRENT_TIMESTAMP AS fecha_actualizacion
 FROM bronze_guajiranet.maproductos p
 LEFT JOIN bronze_guajiranet.mafamiliasproductos f
-       ON p.idfam1 = f.idfamilia</sql>
+       ON p.idfam1 = f.idfamilia
+WHERE p.idproducto IS NOT NULL
+ORDER BY p.idproducto</sql>
     <variables_active>N</variables_active>
     <attributes/>
     <GUI>

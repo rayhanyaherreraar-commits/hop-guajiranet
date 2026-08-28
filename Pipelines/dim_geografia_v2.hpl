@@ -4,7 +4,7 @@
     <name>dim_geografia_v2</name>
     <name_sync_with_filename>Y</name_sync_with_filename>
     <description/>
-    <extended_description>Fase 2 Silver definitivo. Grano mabarrio.idbarrio. Dual-run: no reemplaza dim_geografia.hpl. Carga solo staging.</extended_description>
+    <extended_description>Fase 2 Silver definitivo. Grano mabarrio.idbarrio. Dual-run: carga stg_dim_geografia_v2. No reemplaza dim_geografia.hpl ni stg_dim_geografia viejo.</extended_description>
     <pipeline_version/>
     <pipeline_type>Normal</pipeline_type>
     <parameters>
@@ -57,20 +57,31 @@
 UNION ALL
 
 SELECT
-    b.idbarrio AS id_barrio,
-    b.nombrebarrio AS barrio,
-    b.dpto,
-    b.mun,
-    c.ciudad AS municipio,
-    dep.departamento,
-    CURRENT_TIMESTAMP AS fecha_actualizacion
-FROM bronze_guajiranet.mabarrio b
-LEFT JOIN bronze_guajiranet.madepartamentos dep
-       ON b.dpto = dep.dpto
-LEFT JOIN bronze_guajiranet.maciudades c
-       ON b.mun = c.mun
-      AND b.dpto = c.dpto
-WHERE b.idbarrio IS DISTINCT FROM 0</sql>
+    x.id_barrio,
+    x.barrio,
+    x.dpto,
+    x.mun,
+    x.municipio,
+    x.departamento,
+    x.fecha_actualizacion
+FROM (
+    SELECT DISTINCT ON (b.idbarrio)
+        b.idbarrio AS id_barrio,
+        b.nombrebarrio AS barrio,
+        b.dpto,
+        b.mun,
+        c.ciudad AS municipio,
+        dep.departamento,
+        CURRENT_TIMESTAMP AS fecha_actualizacion
+    FROM bronze_guajiranet.mabarrio b
+    LEFT JOIN bronze_guajiranet.madepartamentos dep
+           ON b.dpto = dep.dpto
+    LEFT JOIN bronze_guajiranet.maciudades c
+           ON b.mun = c.mun
+          AND b.dpto = c.dpto
+    WHERE b.idbarrio IS DISTINCT FROM 0
+    ORDER BY b.idbarrio
+) x</sql>
     <variables_active>N</variables_active>
     <attributes/>
     <GUI>
@@ -189,7 +200,7 @@ WHERE b.idbarrio IS DISTINCT FROM 0</sql>
     </mapping>
     <schema>silver_guajiranet</schema>
     <stop_on_error>N</stop_on_error>
-    <table>stg_dim_geografia</table>
+    <table>stg_dim_geografia_v2</table>
     <attributes/>
     <GUI>
       <xloc>832</xloc>

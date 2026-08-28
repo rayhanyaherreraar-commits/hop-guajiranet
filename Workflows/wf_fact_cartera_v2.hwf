@@ -3,7 +3,7 @@
   <name>wf_fact_cartera_v2</name>
   <name_sync_with_filename>Y</name_sync_with_filename>
   <description/>
-  <extended_description>Fase 3 Silver definitivo. Dual-run. Pipeline TRUNCATE stg + UPSERT tbl. No toca workflows viejos.</extended_description>
+  <extended_description>Fase 3 Silver definitivo. Dual-run sobre tbl/stg_fact_cartera_v2. DELETE+UPSERT solo sobre v2. No toca cartera vieja.</extended_description>
   <workflow_version/>
   <created_user>-</created_user>
   <created_date>2026/08/24 16:50:00.000</created_date>
@@ -66,10 +66,10 @@
       <attributes/>
       <connection>aws_rds</connection>
       <sendOneStatement>N</sendOneStatement>
-      <sql>DELETE FROM silver_guajiranet.tbl_fact_cartera AS t
+      <sql>DELETE FROM silver_guajiranet.tbl_fact_cartera_v2 AS t
 WHERE NOT EXISTS (
     SELECT 1
-    FROM silver_guajiranet.stg_fact_cartera AS s
+    FROM silver_guajiranet.stg_fact_cartera_v2 AS s
     WHERE s.idsuc = t.idsuc
       AND s.prefijo = t.prefijo
       AND s.numero = t.numero
@@ -79,7 +79,7 @@ WHERE NOT EXISTS (
       AND s.ref_doc = t.ref_doc
       AND s.ref_num = t.ref_num
 );
-INSERT INTO silver_guajiranet.tbl_fact_cartera
+INSERT INTO silver_guajiranet.tbl_fact_cartera_v2
 (
     idsuc,
     prefijo,
@@ -142,7 +142,7 @@ SELECT DISTINCT ON (idsuc, prefijo, numero, cuenta, nit, sucursal, ref_doc, ref_
     idformapago,
     transaccion,
     fecha_actualizacion
-FROM silver_guajiranet.stg_fact_cartera
+FROM silver_guajiranet.stg_fact_cartera_v2
 ORDER BY idsuc, prefijo, numero, cuenta, nit, sucursal, ref_doc, ref_num
 
 ON CONFLICT (idsuc, prefijo, numero, cuenta, nit, sucursal, ref_doc, ref_num)

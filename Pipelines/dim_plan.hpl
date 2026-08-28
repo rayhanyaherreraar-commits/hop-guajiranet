@@ -60,7 +60,8 @@
     NULLIF(p.datajson-&gt;&gt;'updated_at', '')::timestamptz AS updated_at,
     CURRENT_TIMESTAMP AS fecha_actualizacion
 FROM bronze_guajiranet.tmjsonplan_server p
-WHERE p.tipo = 'P'</sql>
+WHERE p.tipo = 'P'
+  AND NULLIF(TRIM(p.datajson-&gt;&gt;'id'), '') IS NOT NULL</sql>
     <variables_active>N</variables_active>
     <attributes/>
     <GUI>

@@ -3,7 +3,7 @@
   <name>wf_fact_facturacion_v2</name>
   <name_sync_with_filename>Y</name_sync_with_filename>
   <description/>
-  <extended_description>Fase 3 Silver definitivo. Dual-run. Pipeline TRUNCATE stg + UPSERT tbl. No toca workflows viejos.</extended_description>
+  <extended_description>Fase 3 Silver definitivo. Dual-run sobre tbl/stg_fact_facturacion_v2. No toca el fact viejo.</extended_description>
   <workflow_version/>
   <created_user>-</created_user>
   <created_date>2026/08/24 16:50:00.000</created_date>
@@ -66,7 +66,7 @@
       <attributes/>
       <connection>aws_rds</connection>
       <sendOneStatement>N</sendOneStatement>
-      <sql>INSERT INTO silver_guajiranet.tbl_fact_facturacion
+      <sql>INSERT INTO silver_guajiranet.tbl_fact_facturacion_v2
 (
     idsuc,
     prefijo,
@@ -111,7 +111,7 @@ SELECT DISTINCT ON (idsuc, prefijo, numero, pos)
     iva,
     neto,
     fecha_actualizacion
-FROM silver_guajiranet.stg_fact_facturacion
+FROM silver_guajiranet.stg_fact_facturacion_v2
 ORDER BY idsuc, prefijo, numero, pos
 
 ON CONFLICT (idsuc, prefijo, numero, pos)

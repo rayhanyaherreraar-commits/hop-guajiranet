@@ -9,6 +9,7 @@
 -- CREATE: persona, sucursal, contrato, plan, producto_erp, perfil_cartera
 -- REPLACE mismo nombre: tbl_dim_geografia
 --   Si existe el modelo viejo (id_barrio varchar), NO se altera.
+--   Carga Hop dual-run: sql/silver/08_create_dualrun_v2.sql (tbl/stg_dim_geografia_v2).
 --   Ver 07_drop_obsolete.sql (cutover) y discovery/silver_ddl_implementation.md.
 -- =============================================================================
 

@@ -68,7 +68,8 @@
     c.datajson-&gt;&gt;'mac_address' AS mac_address,
     c.datajson-&gt;&gt;'plan_id' AS plan_id,
     CURRENT_TIMESTAMP AS fecha_actualizacion
-FROM bronze_guajiranet.tmjsoncontract c</sql>
+FROM bronze_guajiranet.tmjsoncontract c
+WHERE NULLIF(TRIM(c.datajson-&gt;&gt;'id'), '') IS NOT NULL</sql>
     <variables_active>N</variables_active>
     <attributes/>
     <GUI>

@@ -73,8 +73,8 @@
 FROM bronze_guajiranet.matercerosuc s
 INNER JOIN silver_guajiranet.tbl_dim_persona p
         ON s.nit = p.nit
-LEFT JOIN silver_guajiranet.tbl_dim_geografia g
-       ON CAST(s.idbarrio AS VARCHAR) = CAST(g.id_barrio AS VARCHAR)
+LEFT JOIN silver_guajiranet.tbl_dim_geografia_v2 g
+       ON COALESCE(s.idbarrio, 0) = g.id_barrio
 LEFT JOIN silver_guajiranet.tbl_dim_perfil_cartera pc
        ON COALESCE(s.idperfilcartera, 0) = pc.id_perfil</sql>
     <variables_active>N</variables_active>

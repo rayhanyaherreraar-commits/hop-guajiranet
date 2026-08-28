@@ -45,7 +45,7 @@
     <connection>aws_rds</connection>
     <execute_each_row>N</execute_each_row>
     <limit>0</limit>
-    <sql>SELECT
+    <sql>SELECT DISTINCT ON (p.id)
     p.id AS id_pago_digital,
     p.idsuc,
     p.prefijo,
@@ -75,7 +75,8 @@ LEFT JOIN silver_guajiranet.tbl_dim_sucursal suc
 LEFT JOIN silver_guajiranet.tbl_dim_persona per
        ON f.nit = per.nit
 LEFT JOIN silver_guajiranet.tbl_dim_tiempo tm
-       ON CAST(p.foperacion AS date) = tm.fecha</sql>
+       ON CAST(p.foperacion AS date) = tm.fecha
+ORDER BY p.id</sql>
     <variables_active>N</variables_active>
     <attributes/>
     <GUI>

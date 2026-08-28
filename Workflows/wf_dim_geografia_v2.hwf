@@ -3,7 +3,7 @@
   <name>wf_dim_geografia_v2</name>
   <name_sync_with_filename>Y</name_sync_with_filename>
   <description/>
-  <extended_description>Fase 3 Silver definitivo. Dual-run. Pipeline TRUNCATE stg + UPSERT tbl. No toca workflows viejos.</extended_description>
+  <extended_description>Fase 3 Silver definitivo. Dual-run sobre tbl/stg_dim_geografia_v2. No toca tbl_dim_geografia vieja.</extended_description>
   <workflow_version/>
   <created_user>-</created_user>
   <created_date>2026/08/24 16:50:00.000</created_date>
@@ -66,7 +66,7 @@
       <attributes/>
       <connection>aws_rds</connection>
       <sendOneStatement>N</sendOneStatement>
-      <sql>INSERT INTO silver_guajiranet.tbl_dim_geografia
+      <sql>INSERT INTO silver_guajiranet.tbl_dim_geografia_v2
 (
     id_barrio,
     barrio,
@@ -85,11 +85,12 @@ SELECT DISTINCT ON (id_barrio)
     municipio,
     departamento,
     fecha_actualizacion
-FROM silver_guajiranet.stg_dim_geografia
+FROM silver_guajiranet.stg_dim_geografia_v2
 ORDER BY id_barrio
 
 ON CONFLICT (id_barrio)
 DO UPDATE SET
+    barrio = EXCLUDED.barrio,
     dpto = EXCLUDED.dpto,
     mun = EXCLUDED.mun,
     municipio = EXCLUDED.municipio,

@@ -7,6 +7,7 @@
 --         fact_pago_aplicacion, fact_pago_pasarela
 -- REPLACE mismo nombre: tbl_fact_facturacion, tbl_fact_cartera
 --   Si el modelo viejo sigue en pie, NOTICE de BLOQUEO (cutover = 07).
+--   Carga Hop dual-run: 08_create_dualrun_v2.sql (tbl/stg_fact_*_v2).
 --
 -- FACT_FACTURACION: sk_contrato y sk_plan son NULLABLE y se cargan siempre NULL.
 --   No hay CHECK que lo fuerce: Hop podrá llenarlos cuando exista un join fiable.
