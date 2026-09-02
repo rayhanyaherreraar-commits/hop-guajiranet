@@ -1,0 +1,142 @@
+/*
+  Vinculación y deserción — medidas NUEVAS.
+  Tabla home: crear `_medidas vinculacion` (Enter Data, 1 columna dummy, ocultar).
+
+  NO crear: Ingresos, Clientes Atendidos, Venta Mes Actual,
+  Clientes Atendidos Mes Anterior, Saldo Cartera, Pago Aplicado, Pago Pasarela,
+  Ultima Fecha Pago Aplicado, Ultima Fecha Pago Pasarela, Contratos, Planes ISP.
+
+  Tablas (nombres EXACTOS de consulta):
+    'anl episodios ciclo vida cliente'
+    'anl episodios interrupcion pago'
+    'anl ciclo vida cliente resumen'
+    'anl estado transaccional mensual cliente'
+    'anl ciclo vida parametros'   -- sin medidas; 1 fila, sin relación
+
+  Granos:
+    episodios factura  = 1 fila por (sk_cliente, numero_episodio)     -> COUNTROWS
+    episodios pago     = 1 fila por (sk_cliente, numero_episodio_pago) -> COUNTROWS
+    resumen            = 1 fila por sk_cliente                         -> COUNTROWS / MAX fechas
+    mensual            = 1 fila por (sk_cliente, mes)                  -> no COUNTROWS como "clientes"
+
+  No SUM(pagorc). No usar fact cartera. fecharetiroisp no es churn.
+*/
+
+-- ========== CICLO DE VIDA / FACTURACIÓN ==========
+
+Clientes con Episodio =
+DISTINCTCOUNT ( 'anl episodios ciclo vida cliente'[sk_cliente] )
+
+Episodios de Inactividad =
+COUNTROWS ( 'anl episodios ciclo vida cliente' )
+
+Recuperaciones Transaccionales =
+CALCULATE (
+    COUNTROWS ( 'anl episodios ciclo vida cliente' ),
+    'anl episodios ciclo vida cliente'[recuperacion_transaccional_observada] = TRUE ()
+)
+
+Deserciones Transaccionales Observadas =
+CALCULATE (
+    COUNTROWS ( 'anl episodios ciclo vida cliente' ),
+    'anl episodios ciclo vida cliente'[recuperacion_transaccional_observada] = FALSE ()
+)
+
+Días Inactivos Promedio =
+AVERAGE ( 'anl episodios ciclo vida cliente'[dias_inactivo] )
+
+Días Inactivos Máximo =
+MAX ( 'anl episodios ciclo vida cliente'[dias_inactivo] )
+
+Clientes Actualmente Inactivos =
+CALCULATE (
+    COUNTROWS ( 'anl ciclo vida cliente resumen' ),
+    'anl ciclo vida cliente resumen'[activo_transaccional_actual] = FALSE ()
+)
+
+% Recuperación Transaccional =
+DIVIDE ( [Recuperaciones Transaccionales], [Episodios de Inactividad] )
+
+-- ========== PAGO (reloj independiente) ==========
+
+Episodios de Interrupción de Pago =
+COUNTROWS ( 'anl episodios interrupcion pago' )
+
+Recuperaciones de Pago =
+CALCULATE (
+    COUNTROWS ( 'anl episodios interrupcion pago' ),
+    'anl episodios interrupcion pago'[recupero_pago] = TRUE ()
+)
+
+Interrupciones de Pago Abiertas =
+CALCULATE (
+    COUNTROWS ( 'anl episodios interrupcion pago' ),
+    'anl episodios interrupcion pago'[recupero_pago] = FALSE ()
+)
+
+Días Sin Pago Promedio =
+AVERAGE ( 'anl episodios interrupcion pago'[dias_sin_pago] )
+
+Días Sin Pago Máximo =
+MAX ( 'anl episodios interrupcion pago'[dias_sin_pago] )
+
+% Recuperación de Pago =
+DIVIDE ( [Recuperaciones de Pago], [Episodios de Interrupción de Pago] )
+
+Clientes con Pago Posterior a Última Factura =
+CALCULATE (
+    COUNTROWS ( 'anl ciclo vida cliente resumen' ),
+    'anl ciclo vida cliente resumen'[pago_posterior_a_ultima_factura] = TRUE ()
+)
+
+-- ========== ÚLTIMA ACTIVIDAD (desde resumen, grano cliente) ==========
+
+Última Factura =
+MAX ( 'anl ciclo vida cliente resumen'[ultima_fecha_factura] )
+
+Último Pago Aplicado =
+MAX ( 'anl ciclo vida cliente resumen'[ultima_actividad_pago_aplicado] )
+
+Último Pago Pasarela =
+MAX ( 'anl ciclo vida cliente resumen'[ultima_actividad_pago_pasarela] )
+
+Última Actividad Conocida =
+VAR Fac = [Última Factura]
+VAR Pag = MAX ( 'anl ciclo vida cliente resumen'[ultima_actividad_pago] )
+RETURN
+    IF (
+        ISBLANK ( Fac ) && ISBLANK ( Pag ),
+        BLANK (),
+        IF (
+            ISBLANK ( Fac ),
+            Pag,
+            IF ( ISBLANK ( Pag ), Fac, IF ( Fac > Pag, Fac, Pag ) )
+        )
+    )
+
+-- Evolución mensual (usar eje mes de ESTA tabla, no dim tiempo)
+Clientes con Factura en Mes =
+CALCULATE (
+    DISTINCTCOUNT ( 'anl estado transaccional mensual cliente'[sk_cliente] ),
+    'anl estado transaccional mensual cliente'[tiene_facturacion] = TRUE ()
+)
+
+Clientes en Deserción Transaccional Observada Mes =
+CALCULATE (
+    DISTINCTCOUNT ( 'anl estado transaccional mensual cliente'[sk_cliente] ),
+    'anl estado transaccional mensual cliente'[estado_transaccional]
+        = "DESERCION_TRANSACCIONAL_OBSERVADA"
+)
+
+Clientes en Recuperación Transaccional Observada Mes =
+CALCULATE (
+    DISTINCTCOUNT ( 'anl estado transaccional mensual cliente'[sk_cliente] ),
+    'anl estado transaccional mensual cliente'[estado_transaccional]
+        = "RECUPERACION_TRANSACCIONAL_OBSERVADA"
+)
+
+Clientes en Interrupción de Pago Mes =
+CALCULATE (
+    DISTINCTCOUNT ( 'anl estado transaccional mensual cliente'[sk_cliente] ),
+    'anl estado transaccional mensual cliente'[estado_pago] = "INTERRUPCION_DE_PAGO"
+)
